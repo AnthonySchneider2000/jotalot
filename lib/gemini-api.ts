@@ -17,7 +17,7 @@ class GeminiService {
   initialize(apiKey: string): boolean {
     try {
       this.genAI = new GoogleGenerativeAI(apiKey);
-      this.model = this.genAI.getGenerativeModel({ model: "gemini-pro" });
+      this.model = this.genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
       return true;
     } catch (error) {
       console.error('Failed to initialize Gemini API:', error);
@@ -31,6 +31,7 @@ class GeminiService {
 
   async getCompletion(request: CompletionRequest): Promise<CompletionResponse | null> {
     if (!this.isInitialized()) {
+      console.warn('Gemini API not initialized');
       return null;
     }
 
@@ -38,6 +39,21 @@ class GeminiService {
       const { text, cursorPosition } = request;
       const beforeCursor = text.substring(0, cursorPosition);
       const afterCursor = text.substring(cursorPosition);
+      
+      // Skip completion for very short text or at the beginning
+      if (beforeCursor.length < 20) {
+        return null;
+      }
+      
+      // Skip if the text ends with punctuation that doesn't need completion
+      if (/[.!?;:]$/.test(beforeCursor.trim())) {
+        return null;
+      }
+      
+      // Skip if user is likely still typing a word (no space at end)
+      if (beforeCursor.length > 20 && !/\s$/.test(beforeCursor)) {
+        return null;
+      }
       
       // Create a prompt for text completion
       const prompt = this.createCompletionPrompt(beforeCursor, afterCursor);
@@ -56,7 +72,16 @@ class GeminiService {
         confidence: 0.8 // Simple confidence score
       };
     } catch (error) {
-      console.error('Gemini completion error:', error);
+      // Log detailed error information for debugging
+      if (error instanceof Error) {
+        console.error('Gemini completion error:', {
+          message: error.message,
+          name: error.name,
+          stack: error.stack
+        });
+      } else {
+        console.error('Unknown Gemini completion error:', error);
+      }
       return null;
     }
   }

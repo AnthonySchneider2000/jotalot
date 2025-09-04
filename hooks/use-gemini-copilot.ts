@@ -28,8 +28,11 @@ export function useGeminiCopilot(): CopilotHookReturn {
 
   const [debouncedText, setDebouncedText] = useState('');
   const [debouncedCursor, setDebouncedCursor] = useState(0);
-  const [debouncedRequestText] = useDebounce(debouncedText, 500);
-  const [debouncedRequestCursor] = useDebounce(debouncedCursor, 500);
+  const [lastRequestText, setLastRequestText] = useState('');
+  const [lastRequestTime, setLastRequestTime] = useState(0);
+  const [rateLimitCooldownUntil, setRateLimitCooldownUntil] = useState(0);
+  const [debouncedRequestText] = useDebounce(debouncedText, 3000); // Increased from 500ms to 3s
+  const [debouncedRequestCursor] = useDebounce(debouncedCursor, 3000);
 
   // Initialize copilot on mount
   useEffect(() => {
@@ -46,30 +49,77 @@ export function useGeminiCopilot(): CopilotHookReturn {
     }
   }, []);
 
-  // Handle debounced suggestion requests
+  // Handle debounced suggestion requests with rate limiting
   useEffect(() => {
     if (debouncedRequestText && state.isEnabled && !state.isLoading) {
+      // Rate limiting: minimum 5 seconds between requests
+      const now = Date.now();
+      const timeSinceLastRequest = now - lastRequestTime;
+      const MIN_REQUEST_INTERVAL = 5000; // 5 seconds
+      
+      // Check for rate limit cooldown period
+      if (now < rateLimitCooldownUntil) {
+        console.log(`Rate limit cooldown: ${rateLimitCooldownUntil - now}ms remaining`);
+        return;
+      }
+      
+      // Check if enough time has passed since last request
+      if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
+        console.log(`Rate limiting: ${MIN_REQUEST_INTERVAL - timeSinceLastRequest}ms until next request allowed`);
+        return;
+      }
+      
+      // Check if text has changed significantly since last request
+      const textDifference = Math.abs(debouncedRequestText.length - lastRequestText.length);
+      const MIN_TEXT_CHANGE = 15; // Minimum 15 characters changed
+      
+      if (textDifference < MIN_TEXT_CHANGE && lastRequestText.length > 0) {
+        console.log(`Skipping suggestion: only ${textDifference} characters changed (minimum: ${MIN_TEXT_CHANGE})`);
+        return;
+      }
+      
+      // Check if we're at a good stopping point (word boundary)
+      const textBeforeCursor = debouncedRequestText.substring(0, debouncedRequestCursor);
+      const endsWithWordBoundary = /\s$/.test(textBeforeCursor) || /[.!?]\s*$/.test(textBeforeCursor);
+      
+      if (!endsWithWordBoundary && textBeforeCursor.length > 20) {
+        console.log('Skipping suggestion: not at word boundary');
+        return;
+      }
+      
+      setLastRequestText(debouncedRequestText);
+      setLastRequestTime(now);
       getSuggestionInternal(debouncedRequestText, debouncedRequestCursor);
     }
-  }, [debouncedRequestText, debouncedRequestCursor, state.isEnabled, state.isLoading]);
+  }, [debouncedRequestText, debouncedRequestCursor, state.isEnabled, state.isLoading, lastRequestText, lastRequestTime]);
 
   const initializeWithApiKey = useCallback((apiKey: string): boolean => {
     try {
+      if (!apiKey || apiKey.trim().length === 0) {
+        setState(prev => ({
+          ...prev,
+          isEnabled: false,
+          error: 'API key is required'
+        }));
+        return false;
+      }
+
       const success = geminiService.initialize(apiKey);
       storage.setGeminiApiKey(apiKey);
       
       setState(prev => ({
         ...prev,
         isEnabled: success,
-        error: success ? null : 'Failed to initialize Gemini API'
+        error: success ? null : 'Failed to initialize Gemini API - check your API key'
       }));
       
       return success;
     } catch (error) {
+      console.error('Copilot initialization error:', error);
       setState(prev => ({
         ...prev,
         isEnabled: false,
-        error: 'Invalid API key or network error'
+        error: 'Invalid API key or connection error'
       }));
       return false;
     }
@@ -85,15 +135,33 @@ export function useGeminiCopilot(): CopilotHookReturn {
       setState(prev => ({
         ...prev,
         suggestion,
-        isLoading: false
+        isLoading: false,
+        error: null // Clear any previous errors on success
       }));
     } catch (error) {
-      setState(prev => ({
-        ...prev,
-        suggestion: null,
-        isLoading: false,
-        error: 'Failed to get suggestion'
-      }));
+      console.warn('Copilot suggestion failed, continuing without suggestions:', error);
+      
+      // Check if this is a rate limit error and set cooldown
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests') || errorMessage.includes('quota')) {
+        const cooldownDuration = 60000; // 60 seconds cooldown for rate limits
+        setRateLimitCooldownUntil(Date.now() + cooldownDuration);
+        console.log(`Rate limit detected, entering ${cooldownDuration / 1000}s cooldown period`);
+        
+        setState(prev => ({
+          ...prev,
+          suggestion: null,
+          isLoading: false,
+          error: 'Rate limit reached - suggestions paused for 1 minute'
+        }));
+      } else {
+        setState(prev => ({
+          ...prev,
+          suggestion: null,
+          isLoading: false,
+          error: 'Suggestion service temporarily unavailable'
+        }));
+      }
     }
   }, [state.isEnabled, state.isLoading]);
 
