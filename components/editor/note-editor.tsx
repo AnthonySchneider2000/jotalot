@@ -15,7 +15,6 @@ interface NoteEditorProps {
 
 export function NoteEditor({ onApiKeyValidityChange, onSaveStatusChange, onManualSaveRequest }: NoteEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const backgroundTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [content, setContent] = useState('');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [savedContent, setSavedContent] = useState('');
@@ -81,12 +80,35 @@ export function NoteEditor({ onApiKeyValidityChange, onSaveStatusChange, onManua
     }
   }, [copilot]);
 
-  // Create the display text for background layer with suggestion at cursor position
-  const getDisplayTextWithSuggestion = useCallback(() => {
-    if (!copilot.suggestion || !textareaRef.current) return content;
+  // Calculate precise cursor position using Canvas measureText
+  const getCursorPosition = useCallback(() => {
+    if (!textareaRef.current || !copilot.suggestion) return null;
     
-    const cursorPos = textareaRef.current.selectionStart;
-    return content.slice(0, cursorPos) + copilot.suggestion + content.slice(cursorPos);
+    const textarea = textareaRef.current;
+    const cursorPos = textarea.selectionStart;
+    const textBeforeCursor = content.slice(0, cursorPos);
+    
+    // Create a canvas to measure text width
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    
+    // Set font to match textarea exactly
+    ctx.font = "16px 'Geist', 'Inter', system-ui, -apple-system, sans-serif";
+    
+    // Split text into lines to handle multi-line positioning
+    const lines = textBeforeCursor.split('\n');
+    const currentLineIndex = lines.length - 1;
+    const currentLineText = lines[currentLineIndex];
+    
+    // Measure width of text on current line
+    const textWidth = ctx.measureText(currentLineText).width;
+    
+    // Calculate position (24px padding + measured width)
+    const left = 24 + textWidth;
+    const top = 24 + (currentLineIndex * 16 * 1.7); // line-height: 1.7, font-size: 16px
+    
+    return { left, top };
   }, [content, copilot.suggestion]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -263,13 +285,6 @@ export function NoteEditor({ onApiKeyValidityChange, onSaveStatusChange, onManua
     }, 0);
   }, [getSelectionInfo]);
 
-  // Scroll synchronization between foreground and background textareas
-  const handleScroll = useCallback((e: React.UIEvent<HTMLTextAreaElement>) => {
-    if (backgroundTextareaRef.current) {
-      backgroundTextareaRef.current.scrollTop = e.currentTarget.scrollTop;
-      backgroundTextareaRef.current.scrollLeft = e.currentTarget.scrollLeft;
-    }
-  }, []);
 
   useEditorShortcuts({
     onSelectWord: selectCurrentWord,
@@ -284,30 +299,29 @@ export function NoteEditor({ onApiKeyValidityChange, onSaveStatusChange, onManua
   return (
     <div className="relative flex-1 flex flex-col h-full">
       <div className="flex-1 relative">
-        {/* Background layer for suggestion ghost text */}
-        {copilot.suggestion && (
-          <TextareaAutosize
-            ref={backgroundTextareaRef}
-            value={getDisplayTextWithSuggestion()}
-            className="w-full h-full min-h-screen resize-none absolute inset-0 pointer-events-none z-0"
-            style={{
-              fontFamily: "'Geist', 'Inter', system-ui, -apple-system, sans-serif",
-              fontSize: '16px',
-              lineHeight: '1.7',
-              letterSpacing: 'normal',
-              padding: '24px',
-              margin: '0',
-              border: 'none',
-              outline: 'none',
-              backgroundColor: 'transparent',
-              color: 'hsl(var(--muted-foreground) / 0.5)',
-              whiteSpace: 'pre-wrap',
-              wordWrap: 'break-word',
-            }}
-            readOnly
-            tabIndex={-1}
-          />
-        )}
+        {/* Absolute positioned suggestion overlay */}
+        {copilot.suggestion && (() => {
+          const position = getCursorPosition();
+          if (!position) return null;
+          
+          return (
+            <div
+              className="absolute pointer-events-none z-10"
+              style={{
+                left: `${position.left}px`,
+                top: `${position.top}px`,
+                fontFamily: "'Geist', 'Inter', system-ui, -apple-system, sans-serif",
+                fontSize: '16px',
+                lineHeight: '1.7',
+                color: 'var(--copilot-suggestion)',
+                whiteSpace: 'pre',
+                userSelect: 'none',
+              }}
+            >
+              {copilot.suggestion}
+            </div>
+          );
+        })()}
         
         {/* Foreground layer for actual editing */}
         <TextareaAutosize
@@ -315,7 +329,6 @@ export function NoteEditor({ onApiKeyValidityChange, onSaveStatusChange, onManua
           value={content}
           onChange={handleContentChange}
           onKeyDown={handleKeyDown}
-          onScroll={handleScroll}
           placeholder="Start writing your notes..."
           className="w-full h-full min-h-screen resize-none relative z-10 focus:outline-none focus:ring-0"
           style={{
@@ -331,6 +344,8 @@ export function NoteEditor({ onApiKeyValidityChange, onSaveStatusChange, onManua
             color: 'hsl(var(--foreground))',
             whiteSpace: 'pre-wrap',
             wordWrap: 'break-word',
+            boxSizing: 'border-box',
+            resize: 'none',
           }}
           autoFocus
         />
