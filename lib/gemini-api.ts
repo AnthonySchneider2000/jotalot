@@ -65,9 +65,15 @@ class GeminiService {
       
       const result = await this.model.generateContent(prompt);
       const response = await result.response;
-      const suggestion = response.text().trim();
+      let suggestion = response.text().trim();
       
       console.log('📝 Raw API response:', suggestion);
+      
+      // Handle space token replacement
+      if (suggestion.startsWith('[SPACE]')) {
+        suggestion = ' ' + suggestion.substring(7); // Remove '[SPACE]' and add actual space
+        console.log('🔄 Processed space token, final suggestion:', JSON.stringify(suggestion));
+      }
       
       // Filter out suggestions that are too long or don't make sense
       if (suggestion.length > 100 || suggestion.includes('\n\n')) {
@@ -75,7 +81,7 @@ class GeminiService {
         return null;
       }
       
-      console.log('✨ Returning valid suggestion:', suggestion);
+      console.log('✨ Returning valid suggestion:', JSON.stringify(suggestion));
       return {
         suggestion,
         confidence: 0.8 // Simple confidence score
@@ -99,6 +105,14 @@ class GeminiService {
     const lastLines = beforeCursor.split('\n').slice(-3).join('\n');
     const nextLines = afterCursor.split('\n').slice(0, 2).join('\n');
     
+    // Check if we need a leading space
+    const needsSpace = beforeCursor.length > 0 && 
+                      !/\s$/.test(beforeCursor) && 
+                      !/[.!?,:;]$/.test(beforeCursor);
+    
+    const spaceInstruction = needsSpace ? 
+      "If you're suggesting new words (not completing the current word), start your response with '[SPACE]' followed by your suggestion." : 
+      "";
     return `You are a helpful text completion assistant. Complete the following text naturally and concisely.
 
 Context before cursor:
@@ -107,7 +121,7 @@ ${lastLines}
 Context after cursor:
 ${nextLines}
 
-Provide only the completion text that should be inserted at the cursor position. Keep it short (1-20 words max) and contextually appropriate. Do not repeat existing text.
+Provide only the completion text that should be inserted at the cursor position. Keep it short (1-20 words max) and contextually appropriate. Do not repeat existing text. ${spaceInstruction}
 
 Completion:`;
   }
