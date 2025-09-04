@@ -31,8 +31,8 @@ export function useGeminiCopilot(): CopilotHookReturn {
   const [lastRequestText, setLastRequestText] = useState('');
   const [lastRequestTime, setLastRequestTime] = useState(0);
   const [rateLimitCooldownUntil, setRateLimitCooldownUntil] = useState(0);
-  const [debouncedRequestText] = useDebounce(debouncedText, 3000); // Increased from 500ms to 3s
-  const [debouncedRequestCursor] = useDebounce(debouncedCursor, 3000);
+  const [debouncedRequestText] = useDebounce(debouncedText, 500); // Increased from 500ms to 3s
+  const [debouncedRequestCursor] = useDebounce(debouncedCursor, 500);
 
   // Initialize copilot on mount
   useEffect(() => {
@@ -52,11 +52,11 @@ export function useGeminiCopilot(): CopilotHookReturn {
   // Handle debounced suggestion requests with rate limiting
   useEffect(() => {
     if (debouncedRequestText && state.isEnabled && !state.isLoading) {
-      // Rate limiting: minimum 5 seconds between requests
+      // Rate limiting: minimum 2 seconds between requests
       const now = Date.now();
       const timeSinceLastRequest = now - lastRequestTime;
-      const MIN_REQUEST_INTERVAL = 5000; // 5 seconds
-      
+      const MIN_REQUEST_INTERVAL = 2000; // 2 seconds
+
       // Check for rate limit cooldown period
       if (now < rateLimitCooldownUntil) {
         console.log(`Rate limit cooldown: ${rateLimitCooldownUntil - now}ms remaining`);
@@ -69,23 +69,23 @@ export function useGeminiCopilot(): CopilotHookReturn {
         return;
       }
       
-      // Check if text has changed significantly since last request
-      const textDifference = Math.abs(debouncedRequestText.length - lastRequestText.length);
-      const MIN_TEXT_CHANGE = 15; // Minimum 15 characters changed
+      // // Check if text has changed significantly since last request
+      // const textDifference = Math.abs(debouncedRequestText.length - lastRequestText.length);
+      // const MIN_TEXT_CHANGE = 15; // Minimum 15 characters changed
       
-      if (textDifference < MIN_TEXT_CHANGE && lastRequestText.length > 0) {
-        console.log(`Skipping suggestion: only ${textDifference} characters changed (minimum: ${MIN_TEXT_CHANGE})`);
-        return;
-      }
+      // if (textDifference < MIN_TEXT_CHANGE && lastRequestText.length > 0) {
+      //   console.log(`Skipping suggestion: only ${textDifference} characters changed (minimum: ${MIN_TEXT_CHANGE})`);
+      //   return;
+      // }
       
-      // Check if we're at a good stopping point (word boundary)
-      const textBeforeCursor = debouncedRequestText.substring(0, debouncedRequestCursor);
-      const endsWithWordBoundary = /\s$/.test(textBeforeCursor) || /[.!?]\s*$/.test(textBeforeCursor);
+      // // Check if we're at a good stopping point (word boundary)
+      // const textBeforeCursor = debouncedRequestText.substring(0, debouncedRequestCursor);
+      // const endsWithWordBoundary = /\s$/.test(textBeforeCursor) || /[.!?]\s*$/.test(textBeforeCursor);
       
-      if (!endsWithWordBoundary && textBeforeCursor.length > 20) {
-        console.log('Skipping suggestion: not at word boundary');
-        return;
-      }
+      // if (!endsWithWordBoundary && textBeforeCursor.length > 20) {
+      //   console.log('Skipping suggestion: not at word boundary');
+      //   return;
+      // }
       
       setLastRequestText(debouncedRequestText);
       setLastRequestTime(now);

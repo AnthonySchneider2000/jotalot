@@ -46,17 +46,17 @@ class GeminiService {
         return null;
       }
       
-      // Skip if the text ends with punctuation that doesn't need completion
-      if (/[.!?;:]$/.test(beforeCursor.trim())) {
-        console.log('🚫 Skipping API call: ends with punctuation');
-        return null;
-      }
+      // // Skip if the text ends with punctuation that doesn't need completion
+      // if (/[.!?;:]$/.test(beforeCursor.trim())) {
+      //   console.log('🚫 Skipping API call: ends with punctuation');
+      //   return null;
+      // }
       
-      // Skip if user is likely still typing a word (no space at end)
-      if (beforeCursor.length > 20 && !/\s$/.test(beforeCursor)) {
-        console.log('🚫 Skipping API call: not at word boundary');
-        return null;
-      }
+      // // Skip if user is likely still typing a word (no space at end)
+      // if (beforeCursor.length > 20 && !/\s$/.test(beforeCursor)) {
+      //   console.log('🚫 Skipping API call: not at word boundary');
+      //   return null;
+      // }
       
       console.log('🚀 Sending request to Gemini API...');
       
