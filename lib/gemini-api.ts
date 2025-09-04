@@ -71,7 +71,10 @@ class GeminiService {
       
       // Handle space token replacement
       if (suggestion.startsWith('[SPACE]')) {
-        suggestion = ' ' + suggestion.substring(7); // Remove '[SPACE]' and add actual space
+        // Remove '[SPACE]' token and replace with a single space
+        // If there's already a space after [SPACE], don't add another one
+        const afterToken = suggestion.substring(7);
+        suggestion = afterToken.startsWith(' ') ? afterToken : ' ' + afterToken;
         console.log('🔄 Processed space token, final suggestion:', JSON.stringify(suggestion));
       }
       
