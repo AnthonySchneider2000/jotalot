@@ -289,12 +289,18 @@ export function NoteEditor({ onApiKeyValidityChange, onSaveStatusChange, onManua
           <TextareaAutosize
             ref={backgroundTextareaRef}
             value={getDisplayTextWithSuggestion()}
-            className="jotalot-editor w-full h-full min-h-screen resize-none border-none outline-none p-6 bg-transparent text-muted-foreground/60 absolute inset-0 pointer-events-none z-0"
+            className="w-full h-full min-h-screen resize-none absolute inset-0 pointer-events-none z-0"
             style={{
-              fontSize: 'inherit',
-              fontFamily: 'inherit',
-              lineHeight: 'inherit',
-              letterSpacing: 'inherit',
+              fontFamily: "'Geist', 'Inter', system-ui, -apple-system, sans-serif",
+              fontSize: '16px',
+              lineHeight: '1.7',
+              letterSpacing: 'normal',
+              padding: '24px',
+              margin: '0',
+              border: 'none',
+              outline: 'none',
+              backgroundColor: 'transparent',
+              color: 'hsl(var(--muted-foreground) / 0.5)',
               whiteSpace: 'pre-wrap',
               wordWrap: 'break-word',
             }}
@@ -311,9 +317,20 @@ export function NoteEditor({ onApiKeyValidityChange, onSaveStatusChange, onManua
           onKeyDown={handleKeyDown}
           onScroll={handleScroll}
           placeholder="Start writing your notes..."
-          className="jotalot-editor w-full h-full min-h-screen resize-none border-none outline-none focus:ring-0 p-6 bg-transparent relative z-10"
+          className="w-full h-full min-h-screen resize-none relative z-10 focus:outline-none focus:ring-0"
           style={{
+            fontFamily: "'Geist', 'Inter', system-ui, -apple-system, sans-serif",
+            fontSize: '16px',
+            lineHeight: '1.7',
+            letterSpacing: 'normal',
+            padding: '24px',
+            margin: '0',
+            border: 'none',
+            outline: 'none',
             backgroundColor: 'transparent',
+            color: 'hsl(var(--foreground))',
+            whiteSpace: 'pre-wrap',
+            wordWrap: 'break-word',
           }}
           autoFocus
         />
