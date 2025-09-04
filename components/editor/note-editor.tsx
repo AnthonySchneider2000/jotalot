@@ -9,20 +9,24 @@ import { useGeminiCopilot } from '@/hooks/use-gemini-copilot';
 
 interface NoteEditorProps {
   onApiKeyValidityChange: (isValid: boolean) => void;
+  onSaveStatusChange: (hasUnsavedChanges: boolean, lastSaved: Date | null) => void;
+  onManualSaveRequest: React.MutableRefObject<(() => void) | null>;
 }
 
-export function NoteEditor({ onApiKeyValidityChange }: NoteEditorProps) {
+export function NoteEditor({ onApiKeyValidityChange, onSaveStatusChange, onManualSaveRequest }: NoteEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [content, setContent] = useState('');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [savedContent, setSavedContent] = useState('');
   const [debouncedContent] = useDebounce(content, 3000);
 
   const copilot = useGeminiCopilot();
 
   // Load initial content
   useEffect(() => {
-    const savedContent = storage.getNoteContent();
-    setContent(savedContent);
+    const initialContent = storage.getNoteContent();
+    setContent(initialContent);
+    setSavedContent(initialContent);
     const savedTime = storage.getLastSaved();
     if (savedTime) {
       setLastSaved(new Date(savedTime));
@@ -31,16 +35,39 @@ export function NoteEditor({ onApiKeyValidityChange }: NoteEditorProps) {
 
   // Auto-save debounced content
   useEffect(() => {
-    if (debouncedContent !== undefined) {
+    if (debouncedContent !== undefined && debouncedContent !== savedContent) {
       storage.setNoteContent(debouncedContent);
-      setLastSaved(new Date());
+      const now = new Date();
+      setLastSaved(now);
+      setSavedContent(debouncedContent);
     }
-  }, [debouncedContent]);
+  }, [debouncedContent, savedContent]);
 
   // Update API key validity when copilot state changes
   useEffect(() => {
     onApiKeyValidityChange(copilot.isEnabled && !copilot.error);
   }, [copilot.isEnabled, copilot.error, onApiKeyValidityChange]);
+
+  // Update save status when content or save state changes
+  useEffect(() => {
+    const hasUnsavedChanges = content !== savedContent;
+    onSaveStatusChange(hasUnsavedChanges, lastSaved);
+  }, [content, savedContent, lastSaved, onSaveStatusChange]);
+
+  // Manual save function
+  const handleManualSave = useCallback(() => {
+    if (content !== savedContent) {
+      storage.setNoteContent(content);
+      const now = new Date();
+      setLastSaved(now);
+      setSavedContent(content);
+    }
+  }, [content, savedContent]);
+
+  // Handle manual save request from parent
+  useEffect(() => {
+    onManualSaveRequest.current = handleManualSave;
+  }, [handleManualSave, onManualSaveRequest]);
 
   const handleContentChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newContent = e.target.value;
