@@ -19,6 +19,16 @@ export function NoteEditor({ onApiKeyValidityChange, onSaveStatusChange, onManua
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [savedContent, setSavedContent] = useState('');
   const [debouncedContent] = useDebounce(content, 3000);
+  
+  // Track suggestion state for intelligent management
+  const [suggestionContext, setSuggestionContext] = useState<{
+    originalContent: string;
+    cursorPosition: number;
+    suggestion: string;
+  } | null>(null);
+
+  // Track the display suggestion (what should be shown to user after partial typing)
+  const [displaySuggestion, setDisplaySuggestion] = useState<string | null>(null);
 
   const copilot = useGeminiCopilot();
 
@@ -54,6 +64,24 @@ export function NoteEditor({ onApiKeyValidityChange, onSaveStatusChange, onManua
     onSaveStatusChange(hasUnsavedChanges, lastSaved);
   }, [content, savedContent, lastSaved, onSaveStatusChange]);
 
+  // Track when new suggestions are received to set context
+  useEffect(() => {
+    if (copilot.suggestion && !suggestionContext && textareaRef.current) {
+      // New suggestion received - set the context
+      const cursorPosition = textareaRef.current.selectionStart;
+      setSuggestionContext({
+        originalContent: content,
+        cursorPosition: cursorPosition,
+        suggestion: copilot.suggestion
+      });
+      setDisplaySuggestion(copilot.suggestion);
+    } else if (!copilot.suggestion && suggestionContext) {
+      // Suggestion was dismissed - clear context
+      setSuggestionContext(null);
+      setDisplaySuggestion(null);
+    }
+  }, [copilot.suggestion, suggestionContext, content]);
+
   // Manual save function
   const handleManualSave = useCallback(() => {
     if (content !== savedContent) {
@@ -71,18 +99,72 @@ export function NoteEditor({ onApiKeyValidityChange, onSaveStatusChange, onManua
 
   const handleContentChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newContent = e.target.value;
+    const newCursorPosition = e.target.selectionStart;
+    
     setContent(newContent);
     
-    // Get cursor position and trigger copilot suggestion
-    const cursorPosition = e.target.selectionStart;
+    // Intelligent suggestion management
     if (copilot.isEnabled && newContent.length > 0) {
-      copilot.getSuggestion(newContent, cursorPosition);
+      if (copilot.suggestion && suggestionContext) {
+        // We have an existing suggestion - check if it's still valid
+        const { originalContent, cursorPosition: originalCursor, suggestion } = suggestionContext;
+        
+        // Always dismiss suggestions if cursor moved backward or content length decreased
+        if (newContent.length < originalContent.length || newCursorPosition < originalCursor) {
+          // User backspaced or moved cursor back - dismiss suggestion
+          copilot.dismissSuggestion();
+          setSuggestionContext(null);
+          setDisplaySuggestion(null);
+        } else {
+          // Check if user is typing characters that match the suggestion
+          const typedSinceOriginal = newContent.slice(originalCursor, newCursorPosition);
+          const contentBeforeOriginalCursor = newContent.slice(0, originalCursor);
+          
+          // Verify the content before the original cursor hasn't changed
+          if (contentBeforeOriginalCursor !== originalContent.slice(0, originalCursor)) {
+            // Content before cursor changed - dismiss suggestion
+            copilot.dismissSuggestion();
+            setSuggestionContext(null);
+            setDisplaySuggestion(null);
+          } else if (typedSinceOriginal.length > 0) {
+            // User typed something - check if it matches the suggestion
+            if (suggestion.startsWith(typedSinceOriginal)) {
+              // Typed text matches suggestion beginning - update display to show remaining part
+              const remainingSuggestion = suggestion.slice(typedSinceOriginal.length);
+              if (remainingSuggestion.length > 0) {
+                // Update display suggestion to show only the remaining part
+                setDisplaySuggestion(remainingSuggestion);
+                // Keep the original context - DON'T update it!
+              } else {
+                // User typed the entire suggestion - dismiss it
+                copilot.dismissSuggestion();
+                setSuggestionContext(null);
+                setDisplaySuggestion(null);
+              }
+            } else {
+              // Typed text doesn't match suggestion - dismiss it
+              copilot.dismissSuggestion();
+              setSuggestionContext(null);
+              setDisplaySuggestion(null);
+            }
+          }
+          // If no text was typed (just cursor movement), keep the suggestion as is
+        }
+      } else {
+        // No existing suggestion - request a new one
+        copilot.getSuggestion(newContent, newCursorPosition);
+      }
+    } else if (copilot.suggestion) {
+      // Copilot disabled or content empty but suggestion exists - dismiss it
+      copilot.dismissSuggestion();
+      setSuggestionContext(null);
+      setDisplaySuggestion(null);
     }
-  }, [copilot]);
+  }, [copilot, suggestionContext]);
 
   // Calculate precise cursor position using Canvas measureText
   const getCursorPosition = useCallback(() => {
-    if (!textareaRef.current || !copilot.suggestion) return null;
+    if (!textareaRef.current || !displaySuggestion) return null;
     
     const textarea = textareaRef.current;
     const cursorPos = textarea.selectionStart;
@@ -109,22 +191,26 @@ export function NoteEditor({ onApiKeyValidityChange, onSaveStatusChange, onManua
     const top = 24 + (currentLineIndex * 16 * 1.7); // line-height: 1.7, font-size: 16px
     
     return { left, top };
-  }, [content, copilot.suggestion]);
+  }, [content, displaySuggestion]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Handle Tab for copilot suggestion
-    if (e.key === 'Tab' && copilot.suggestion) {
+    if (e.key === 'Tab' && displaySuggestion) {
       e.preventDefault();
-      const suggestion = copilot.acceptSuggestion();
-      if (suggestion && textareaRef.current) {
+      if (textareaRef.current) {
         const textarea = textareaRef.current;
         const cursorPos = textarea.selectionStart;
-        const newContent = content.slice(0, cursorPos) + suggestion + content.slice(cursorPos);
+        const newContent = content.slice(0, cursorPos) + displaySuggestion + content.slice(cursorPos);
         setContent(newContent);
+        
+        // Accept the suggestion in the copilot hook and clear our local state
+        copilot.acceptSuggestion();
+        setSuggestionContext(null);
+        setDisplaySuggestion(null);
         
         // Set cursor position after the inserted suggestion
         setTimeout(() => {
-          textarea.selectionStart = textarea.selectionEnd = cursorPos + suggestion.length;
+          textarea.selectionStart = textarea.selectionEnd = cursorPos + displaySuggestion.length;
           textarea.focus();
         }, 0);
       }
@@ -132,12 +218,14 @@ export function NoteEditor({ onApiKeyValidityChange, onSaveStatusChange, onManua
     }
 
     // Handle Escape to dismiss copilot suggestion
-    if (e.key === 'Escape' && copilot.suggestion) {
+    if (e.key === 'Escape' && displaySuggestion) {
       e.preventDefault();
       copilot.dismissSuggestion();
+      setSuggestionContext(null);
+      setDisplaySuggestion(null);
       return;
     }
-  }, [content, copilot]);
+  }, [content, copilot, displaySuggestion]);
 
   // Editor shortcuts
   const getSelectionInfo = useCallback(() => {
@@ -300,7 +388,7 @@ export function NoteEditor({ onApiKeyValidityChange, onSaveStatusChange, onManua
     <div className="relative flex-1 flex flex-col h-full">
       <div className="flex-1 relative">
         {/* Absolute positioned suggestion overlay */}
-        {copilot.suggestion && (() => {
+        {displaySuggestion && (() => {
           const position = getCursorPosition();
           if (!position) return null;
           
@@ -318,7 +406,7 @@ export function NoteEditor({ onApiKeyValidityChange, onSaveStatusChange, onManua
                 userSelect: 'none',
               }}
             >
-              {copilot.suggestion}
+              {displaySuggestion}
             </div>
           );
         })()}
