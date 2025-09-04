@@ -15,6 +15,7 @@ interface NoteEditorProps {
 
 export function NoteEditor({ onApiKeyValidityChange, onSaveStatusChange, onManualSaveRequest }: NoteEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const backgroundTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [content, setContent] = useState('');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [savedContent, setSavedContent] = useState('');
@@ -79,6 +80,14 @@ export function NoteEditor({ onApiKeyValidityChange, onSaveStatusChange, onManua
       copilot.getSuggestion(newContent, cursorPosition);
     }
   }, [copilot]);
+
+  // Create the display text for background layer with suggestion at cursor position
+  const getDisplayTextWithSuggestion = useCallback(() => {
+    if (!copilot.suggestion || !textareaRef.current) return content;
+    
+    const cursorPos = textareaRef.current.selectionStart;
+    return content.slice(0, cursorPos) + copilot.suggestion + content.slice(cursorPos);
+  }, [content, copilot.suggestion]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Handle Tab for copilot suggestion
@@ -254,6 +263,14 @@ export function NoteEditor({ onApiKeyValidityChange, onSaveStatusChange, onManua
     }, 0);
   }, [getSelectionInfo]);
 
+  // Scroll synchronization between foreground and background textareas
+  const handleScroll = useCallback((e: React.UIEvent<HTMLTextAreaElement>) => {
+    if (backgroundTextareaRef.current) {
+      backgroundTextareaRef.current.scrollTop = e.currentTarget.scrollTop;
+      backgroundTextareaRef.current.scrollLeft = e.currentTarget.scrollLeft;
+    }
+  }, []);
+
   useEditorShortcuts({
     onSelectWord: selectCurrentWord,
     onSelectLine: selectCurrentLine,
@@ -267,28 +284,39 @@ export function NoteEditor({ onApiKeyValidityChange, onSaveStatusChange, onManua
   return (
     <div className="relative flex-1 flex flex-col h-full">
       <div className="flex-1 relative">
+        {/* Background layer for suggestion ghost text */}
+        {copilot.suggestion && (
+          <TextareaAutosize
+            ref={backgroundTextareaRef}
+            value={getDisplayTextWithSuggestion()}
+            className="jotalot-editor w-full h-full min-h-screen resize-none border-none outline-none p-6 bg-transparent text-muted-foreground/60 absolute inset-0 pointer-events-none z-0"
+            style={{
+              fontSize: 'inherit',
+              fontFamily: 'inherit',
+              lineHeight: 'inherit',
+              letterSpacing: 'inherit',
+              whiteSpace: 'pre-wrap',
+              wordWrap: 'break-word',
+            }}
+            readOnly
+            tabIndex={-1}
+          />
+        )}
+        
+        {/* Foreground layer for actual editing */}
         <TextareaAutosize
           ref={textareaRef}
           value={content}
           onChange={handleContentChange}
           onKeyDown={handleKeyDown}
+          onScroll={handleScroll}
           placeholder="Start writing your notes..."
-          className="jotalot-editor w-full h-full min-h-screen resize-none border-none outline-none focus:ring-0 p-6 bg-transparent"
+          className="jotalot-editor w-full h-full min-h-screen resize-none border-none outline-none focus:ring-0 p-6 bg-transparent relative z-10"
+          style={{
+            backgroundColor: 'transparent',
+          }}
           autoFocus
         />
-        
-        {/* Copilot suggestion overlay */}
-        {copilot.suggestion && (
-          <div className="copilot-suggestion absolute bottom-4 right-4 bg-background border rounded-lg p-3 shadow-lg max-w-sm">
-            <div className="text-xs text-muted-foreground mb-1">Copilot suggestion:</div>
-            <div className="text-sm font-mono bg-muted p-2 rounded text-muted-foreground">
-              {copilot.suggestion}
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              Press Tab to accept, Esc to dismiss
-            </div>
-          </div>
-        )}
       </div>
       
       {/* Status bar */}
