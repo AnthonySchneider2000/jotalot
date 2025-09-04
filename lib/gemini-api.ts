@@ -42,18 +42,23 @@ class GeminiService {
       
       // Skip completion for very short text or at the beginning
       if (beforeCursor.length < 20) {
+        console.log('🚫 Skipping API call: text too short (<20 chars)');
         return null;
       }
       
       // Skip if the text ends with punctuation that doesn't need completion
       if (/[.!?;:]$/.test(beforeCursor.trim())) {
+        console.log('🚫 Skipping API call: ends with punctuation');
         return null;
       }
       
       // Skip if user is likely still typing a word (no space at end)
       if (beforeCursor.length > 20 && !/\s$/.test(beforeCursor)) {
+        console.log('🚫 Skipping API call: not at word boundary');
         return null;
       }
+      
+      console.log('🚀 Sending request to Gemini API...');
       
       // Create a prompt for text completion
       const prompt = this.createCompletionPrompt(beforeCursor, afterCursor);
@@ -62,11 +67,15 @@ class GeminiService {
       const response = await result.response;
       const suggestion = response.text().trim();
       
+      console.log('📝 Raw API response:', suggestion);
+      
       // Filter out suggestions that are too long or don't make sense
       if (suggestion.length > 100 || suggestion.includes('\n\n')) {
+        console.log('🚫 Filtering out suggestion: too long or contains line breaks');
         return null;
       }
       
+      console.log('✨ Returning valid suggestion:', suggestion);
       return {
         suggestion,
         confidence: 0.8 // Simple confidence score

@@ -89,6 +89,7 @@ export function useGeminiCopilot(): CopilotHookReturn {
       
       setLastRequestText(debouncedRequestText);
       setLastRequestTime(now);
+      console.log('🤖 Making Gemini API request for suggestion...');
       getSuggestionInternal(debouncedRequestText, debouncedRequestCursor);
     }
   }, [debouncedRequestText, debouncedRequestCursor, state.isEnabled, state.isLoading, lastRequestText, lastRequestTime]);
@@ -132,6 +133,13 @@ export function useGeminiCopilot(): CopilotHookReturn {
 
     try {
       const suggestion = await geminiService.getSuggestion(text, cursorPosition);
+      
+      if (suggestion) {
+        console.log('✅ Copilot suggestion received:', suggestion);
+      } else {
+        console.log('❌ No suggestion returned from API');
+      }
+      
       setState(prev => ({
         ...prev,
         suggestion,
