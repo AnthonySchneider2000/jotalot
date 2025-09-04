@@ -120,3 +120,46 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* jotalot Editor Styles */
+.jotalot-editor {
+  font-family: 'Geist', 'Inter', system-ui, -apple-system, sans-serif;
+  line-height: 1.7;
+  font-size: 16px;
+}
+
+.jotalot-editor:focus {
+  outline: none;
+}
+
+/* Smooth scrolling for the editor */
+.jotalot-editor {
+  scroll-behavior: smooth;
+}
+
+/* Selection styling */
+.jotalot-editor::selection {
+  background-color: hsl(var(--primary) / 0.2);
+}
+
+/* Placeholder styling */
+.jotalot-editor::placeholder {
+  color: hsl(var(--muted-foreground));
+  opacity: 0.7;
+}
+
+/* Copilot suggestion animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.copilot-suggestion {
+  animation: fadeIn 0.2s ease-out;
+}
