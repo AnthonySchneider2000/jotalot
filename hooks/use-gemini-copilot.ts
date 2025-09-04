@@ -31,6 +31,8 @@ export function useGeminiCopilot(): CopilotHookReturn {
   const [lastRequestText, setLastRequestText] = useState('');
   const [lastRequestTime, setLastRequestTime] = useState(0);
   const [rateLimitCooldownUntil, setRateLimitCooldownUntil] = useState(0);
+  const [pendingRetryTimeout, setPendingRetryTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [pendingRetryData, setPendingRetryData] = useState<{text: string, cursor: number} | null>(null);
   const [debouncedRequestText] = useDebounce(debouncedText, 500); // Increased from 500ms to 3s
   const [debouncedRequestCursor] = useDebounce(debouncedCursor, 500);
 
@@ -49,6 +51,15 @@ export function useGeminiCopilot(): CopilotHookReturn {
     }
   }, []);
 
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (pendingRetryTimeout) {
+        clearTimeout(pendingRetryTimeout);
+      }
+    };
+  }, [pendingRetryTimeout]);
+
   // Handle debounced suggestion requests with rate limiting
   useEffect(() => {
     if (debouncedRequestText && state.isEnabled && !state.isLoading) {
@@ -65,7 +76,43 @@ export function useGeminiCopilot(): CopilotHookReturn {
       
       // Check if enough time has passed since last request
       if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
-        console.log(`Rate limiting: ${MIN_REQUEST_INTERVAL - timeSinceLastRequest}ms until next request allowed`);
+        const remainingTime = MIN_REQUEST_INTERVAL - timeSinceLastRequest;
+        console.log(`Rate limiting: ${remainingTime}ms until next request allowed`);
+        
+        // Schedule automatic retry if no retry is already pending
+        if (!pendingRetryTimeout) {
+          console.log(`⏰ Scheduling automatic retry in ${remainingTime}ms`);
+          
+          // Store the current request data for retry
+          setPendingRetryData({ text: debouncedRequestText, cursor: debouncedRequestCursor });
+          
+          const timeoutId = setTimeout(() => {
+            console.log(`🔄 Executing scheduled retry`);
+            
+            // Only retry if the text hasn't changed and there's no existing suggestion
+            if (pendingRetryData && 
+                pendingRetryData.text === debouncedRequestText && 
+                pendingRetryData.cursor === debouncedRequestCursor &&
+                !state.suggestion &&
+                state.isEnabled &&
+                !state.isLoading) {
+              
+              console.log(`✅ Conditions met, making retry request`);
+              setLastRequestText(debouncedRequestText);
+              setLastRequestTime(Date.now());
+              getSuggestionInternal(debouncedRequestText, debouncedRequestCursor);
+            } else {
+              console.log(`❌ Retry cancelled - conditions not met (text changed: ${pendingRetryData?.text !== debouncedRequestText}, has suggestion: ${!!state.suggestion}, enabled: ${state.isEnabled}, loading: ${state.isLoading})`);
+            }
+            
+            // Clear retry state
+            setPendingRetryTimeout(null);
+            setPendingRetryData(null);
+          }, remainingTime);
+          
+          setPendingRetryTimeout(timeoutId);
+        }
+        
         return;
       }
       
@@ -174,10 +221,18 @@ export function useGeminiCopilot(): CopilotHookReturn {
   }, [state.isEnabled, state.isLoading]);
 
   const getSuggestion = useCallback(async (text: string, cursorPosition: number) => {
+    // Cancel any pending retry when new input is received
+    if (pendingRetryTimeout) {
+      console.log('🚫 Cancelling pending retry due to new input');
+      clearTimeout(pendingRetryTimeout);
+      setPendingRetryTimeout(null);
+      setPendingRetryData(null);
+    }
+    
     // Update debounced values to trigger the effect
     setDebouncedText(text);
     setDebouncedCursor(cursorPosition);
-  }, []);
+  }, [pendingRetryTimeout]);
 
   const acceptSuggestion = useCallback((): string | null => {
     const suggestion = state.suggestion;
