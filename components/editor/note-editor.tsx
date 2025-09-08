@@ -111,10 +111,11 @@ export function NoteEditor({ onApiKeyValidityChange, onSaveStatusChange, onManua
         
         // Always dismiss suggestions if cursor moved backward or content length decreased
         if (newContent.length < originalContent.length || newCursorPosition < originalCursor) {
-          // User backspaced or moved cursor back - dismiss suggestion
+          // User backspaced or moved cursor back - dismiss suggestion and get a new one
           copilot.dismissSuggestion();
           setSuggestionContext(null);
           setDisplaySuggestion(null);
+          copilot.getSuggestion(newContent, newCursorPosition);
         } else {
           // Check if user is typing characters that match the suggestion
           const typedSinceOriginal = newContent.slice(originalCursor, newCursorPosition);
@@ -122,10 +123,11 @@ export function NoteEditor({ onApiKeyValidityChange, onSaveStatusChange, onManua
           
           // Verify the content before the original cursor hasn't changed
           if (contentBeforeOriginalCursor !== originalContent.slice(0, originalCursor)) {
-            // Content before cursor changed - dismiss suggestion
+            // Content before cursor changed - dismiss suggestion and get a new one
             copilot.dismissSuggestion();
             setSuggestionContext(null);
             setDisplaySuggestion(null);
+            copilot.getSuggestion(newContent, newCursorPosition);
           } else if (typedSinceOriginal.length > 0) {
             // User typed something - check if it matches the suggestion
             if (suggestion.startsWith(typedSinceOriginal)) {
@@ -142,10 +144,11 @@ export function NoteEditor({ onApiKeyValidityChange, onSaveStatusChange, onManua
                 setDisplaySuggestion(null);
               }
             } else {
-              // Typed text doesn't match suggestion - dismiss it
+              // Typed text doesn't match suggestion - dismiss it and get a new one
               copilot.dismissSuggestion();
               setSuggestionContext(null);
               setDisplaySuggestion(null);
+              copilot.getSuggestion(newContent, newCursorPosition);
             }
           }
           // If no text was typed (just cursor movement), keep the suggestion as is
