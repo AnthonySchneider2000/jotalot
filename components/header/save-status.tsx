@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Save, Check, Clock, AlertCircle } from 'lucide-react';
+import { Save, Check, Clock } from 'lucide-react';
 
 interface SaveStatusProps {
   hasUnsavedChanges: boolean;

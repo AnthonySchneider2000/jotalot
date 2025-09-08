@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { ApiKeyInput } from '@/components/header/api-key-input';
 import { CopilotStatus } from '@/components/header/copilot-status';

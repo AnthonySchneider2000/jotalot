@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
 
 export interface CompletionRequest {
   text: string;
@@ -12,7 +12,7 @@ export interface CompletionResponse {
 
 class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;
-  private model: any = null;
+  private model: GenerativeModel | null = null;
 
   initialize(apiKey: string): boolean {
     try {
@@ -63,7 +63,7 @@ class GeminiService {
       // Create a prompt for text completion
       const prompt = this.createCompletionPrompt(beforeCursor, afterCursor);
       
-      const result = await this.model.generateContent(prompt);
+      const result = await this.model!.generateContent(prompt);
       const response = await result.response;
       let suggestion = response.text().trim();
       
